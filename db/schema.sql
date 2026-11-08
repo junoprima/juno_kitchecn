@@ -50,6 +50,7 @@ create table if not exists order_items (
   qty          integer not null check (qty > 0)
 );
 create index if not exists order_items_order_id_idx on order_items (order_id);
+create index if not exists order_items_menu_item_id_idx on order_items (menu_item_id);
 
 -- แอปเชื่อมต่อผ่าน DATABASE_URL ฝั่ง server เท่านั้น
 -- เปิด RLS ไว้เพื่อกันไม่ให้ใครอ่าน/เขียนผ่าน Supabase public API (anon key) ได้
