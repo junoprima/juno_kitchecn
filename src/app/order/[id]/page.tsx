@@ -16,7 +16,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
       <h1 className="font-display text-3xl font-semibold text-enamel-deep">
         {order.status === "cancelled" ? "ออเดอร์นี้ถูกยกเลิก" : `ขอบคุณค่ะ คุณ${order.customer_name}`}
       </h1>
-      <p className="mt-1 text-ink-2">แม่ได้รับออเดอร์แล้ว เก็บหน้านี้ไว้ดูสถานะได้ (บันทึกลิงก์หรือแคปจอ)</p>
+      <p className="mt-1 text-ink-2">แม่ได้รับออเดอร์แล้ว บันทึกลิงก์หรือ<wbr />แคปหน้าจอนี้ไว้ดูสถานะได้</p>
 
       <section className="slip slip-torn mt-8 px-5 py-7">
         <div className="flex flex-wrap items-start justify-between gap-4">

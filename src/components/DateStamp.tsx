@@ -5,7 +5,7 @@ export function DateStamp({ date, size = "lg" }: { date: string; size?: "lg" | "
   const rel = relativeDayLabel(date);
   return (
     <div
-      className={`stamp inline-flex flex-col items-start rounded-xl bg-marigold text-marigold-ink shadow-[0_2px_0_rgb(61_42_0/0.25),0_6px_16px_-6px_rgb(61_42_0/0.4)] ${
+      className={`stamp inline-flex flex-col items-start rounded-xl bg-marigold text-marigold-ink shadow-[0_1px_2px_rgb(61_42_0/0.2),0_6px_16px_-6px_rgb(61_42_0/0.4)] ${
         size === "lg" ? "px-4 py-2.5" : "px-3 py-1.5"
       }`}
     >

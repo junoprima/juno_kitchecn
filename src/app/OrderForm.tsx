@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { Minus, Plus, ReceiptText, LoaderCircle } from "lucide-react";
+import { ArrowRight, Minus, Plus, ReceiptText, LoaderCircle } from "lucide-react";
 import { placeOrder } from "@/lib/actions";
 import { baht, formatThaiDate } from "@/lib/dates";
 import type { MenuItem } from "@/lib/types";
@@ -128,7 +128,7 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
         <button
           type="submit"
           disabled={pending || count === 0}
-          className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-enamel font-medium text-white shadow-[0_2px_0_var(--enamel-deep)] transition-[background,transform] hover:bg-enamel-deep active:translate-y-px disabled:cursor-not-allowed disabled:bg-ink-3/40 disabled:shadow-none"
+          className="mt-5 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-enamel font-medium text-white shadow-[0_1px_2px_rgb(21_33_27/0.12),0_6px_14px_-6px_rgb(20_74_54/0.55)] transition-[background,transform] hover:bg-enamel-deep active:translate-y-px disabled:cursor-not-allowed disabled:bg-ink-3/40 disabled:shadow-none"
         >
           {pending ? <LoaderCircle className="size-5 animate-spin" aria-hidden /> : <ReceiptText className="size-5" aria-hidden />}
           {pending ? "กำลังส่งให้แม่…" : "ส่งออเดอร์"}
@@ -141,7 +141,7 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
         <div className="fixed inset-x-0 bottom-0 z-10 border-t border-line bg-surface/95 px-4 py-3 backdrop-blur lg:hidden">
           <a href="#slip" className="mx-auto flex h-12 max-w-5xl items-center justify-between rounded-xl bg-enamel px-4 font-medium text-white">
             <span>{count} รายการ · {baht(total)}</span>
-            <span>ใส่ชื่อแล้วส่ง →</span>
+            <span className="inline-flex items-center gap-1.5">ใส่ชื่อแล้วส่ง <ArrowRight className="size-4" aria-hidden /></span>
           </a>
         </div>
       )}
