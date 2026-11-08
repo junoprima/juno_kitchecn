@@ -1,103 +1,58 @@
-import Image from "next/image";
+import { getBookedQty, getMenu, getSettings } from "@/lib/queries";
+import { deliveryDateFor } from "@/lib/dates";
+import { DateStamp } from "@/components/DateStamp";
+import { OrderForm } from "./OrderForm";
+import { Clock, Moon } from "lucide-react";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+export default async function Home() {
+  const settings = await getSettings();
+  const { date, beforeCutoff } = deliveryDateFor(settings.cutoff_time);
+  const [menu, booked] = await Promise.all([getMenu({ onlyAvailable: true }), getBookedQty(date)]);
+
+  const items = menu.map((m) => ({
+    ...m,
+    left: m.daily_limit == null ? null : Math.max(0, m.daily_limit - (booked.get(m.id) ?? 0)),
+  }));
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <main className="mx-auto max-w-5xl px-4 pb-32 pt-6 sm:px-6 sm:pt-10 lg:pb-16">
+      <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-4">
+        <div>
+          <h1 className="font-display text-4xl font-semibold tracking-tight text-enamel-deep sm:text-5xl">ครัวแม่</h1>
+          <p className="mt-1 text-ink-2">สั่งล่วงหน้า แม่ทำสดๆ ส่งวันถัดไป</p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+        {settings.accepting_orders && <DateStamp date={date} />}
+      </header>
+
+      {settings.accepting_orders ? (
+        <p className="mt-5 flex items-center gap-2 text-sm text-ink-2">
+          <Clock className="size-4 shrink-0 text-enamel" aria-hidden />
+          {beforeCutoff
+            ? `รับออเดอร์รอบนี้ถึง ${settings.cutoff_time} น. คืนนี้`
+            : `เลย ${settings.cutoff_time} น. แล้ว ออเดอร์ตอนนี้จะไปส่งรอบถัดไป`}
+        </p>
+      ) : null}
+
+      {settings.notice && (
+        <p className="mt-4 max-w-prose rounded-xl bg-enamel-tint px-4 py-3 text-enamel-deep">{settings.notice}</p>
+      )}
+
+      {!settings.accepting_orders ? (
+        <section className="mt-10 flex max-w-md flex-col items-start gap-3 rounded-2xl bg-surface p-6 shadow-sm">
+          <Moon className="size-7 text-enamel" aria-hidden />
+          <h2 className="font-display text-xl font-semibold">วันนี้แม่ปิดรับออเดอร์</h2>
+          <p className="text-ink-2">ไว้แวะมาใหม่นะ ถ้าด่วนทักแม่ทางไลน์ได้เลย</p>
+        </section>
+      ) : items.length === 0 ? (
+        <section className="mt-10 max-w-md rounded-2xl bg-surface p-6 shadow-sm">
+          <h2 className="font-display text-xl font-semibold">ยังไม่มีเมนูรอบนี้</h2>
+          <p className="mt-1 text-ink-2">แม่กำลังคิดเมนูอยู่ แวะมาดูใหม่อีกทีนะ</p>
+        </section>
+      ) : (
+        <OrderForm items={items} deliveryDate={date} />
+      )}
+    </main>
   );
 }

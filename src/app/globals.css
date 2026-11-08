@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ground: #eef2ee;
+  --surface: #ffffff;
+  --sunken: #e3e9e4;
+  --ink: #15211b;
+  --ink-2: #48594f;
+  --ink-3: #6b7b72;
+  --line: #d3dcd5;
+  --enamel: #1d654a;
+  --enamel-deep: #144a36;
+  --enamel-tint: #dcebe3;
+  --marigold: #f0b429;
+  --marigold-ink: #3d2a00;
+  --chili: #b42318;
+  --chili-tint: #fde8e6;
+  --sky: #2f5f8f;
+  --sky-tint: #e3edf7;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-enamel: var(--enamel);
+  --color-enamel-deep: var(--enamel-deep);
+  --color-enamel-tint: var(--enamel-tint);
+  --color-marigold: var(--marigold);
+  --color-marigold-ink: var(--marigold-ink);
+  --color-chili: var(--chili);
+  --color-chili-tint: var(--chili-tint);
+  --color-sky: var(--sky);
+  --color-sky-tint: var(--sky-tint);
+  --font-sans: var(--font-body), system-ui, sans-serif;
+  --font-display: var(--font-display), var(--font-body), sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html { -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: var(--marigold); color: var(--marigold-ink); }
+:focus-visible { outline: 2.5px solid var(--enamel); outline-offset: 2px; border-radius: 6px; }
+input, textarea, select { caret-color: var(--enamel); }
+a { text-underline-offset: 0.2em; }
+input::placeholder, textarea::placeholder { color: var(--ink-3); }
+h1, h2, h3 { text-wrap: balance; }
+
+/* ใบสั่ง: ขอบรอยฉีกด้านบน/ล่าง แบบสมุดจดออเดอร์ */
+.slip {
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(21 33 27 / 0.06), 0 8px 24px -8px rgb(21 33 27 / 0.18);
+}
+.slip-torn {
+  -webkit-mask: radial-gradient(circle at 6px 0, transparent 5px, #000 5.5px) top left / 12px 51% repeat-x,
+                radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) bottom left / 12px 51% repeat-x;
+          mask: radial-gradient(circle at 6px 0, transparent 5px, #000 5.5px) top left / 12px 51% repeat-x,
+                radial-gradient(circle at 6px 100%, transparent 5px, #000 5.5px) bottom left / 12px 51% repeat-x;
+}
+.rule-dashed { background-image: linear-gradient(to right, var(--line) 50%, transparent 0); background-size: 10px 1.5px; background-repeat: repeat-x; height: 1.5px; }
+
+@keyframes stamp-in {
+  from { transform: rotate(-4deg) scale(1.25); opacity: 0; filter: blur(3px); }
+  to   { transform: rotate(-4deg) scale(1); opacity: 1; filter: blur(0); }
+}
+.stamp { transform: rotate(-4deg); animation: stamp-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+@media (prefers-reduced-motion: reduce) { .stamp { animation: none; } }
+
+@layer components {
+  .input {
+    width: 100%;
+    border-radius: 0.625rem;
+    border: 1px solid var(--line);
+    background: var(--ground);
+    padding: 0.625rem 0.75rem;
+    font-size: 1rem;
+    transition: border-color 150ms, background 150ms;
+  }
+  .input:hover { border-color: var(--ink-3); }
+  .input:focus { outline: none; border-color: var(--enamel); background: var(--surface); box-shadow: 0 0 0 3px var(--enamel-tint); }
+}
+
+@layer components {
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+    height: 2.5rem; padding: 0 1rem; border-radius: 0.625rem;
+    background: var(--enamel); color: #fff; font-weight: 500;
+    transition: background 150ms;
+  }
+  .btn-primary:hover { background: var(--enamel-deep); }
+  .btn-ghost {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+    height: 2.5rem; padding: 0 0.875rem; border-radius: 0.625rem; font-weight: 500;
+    color: var(--ink-2); transition: background 150ms;
+  }
+  .btn-ghost:hover { background: var(--sunken); }
+  .btn-primary:disabled, .btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+}
+
+@layer components {
+  .icon-btn {
+    display: inline-grid; place-items: center; width: 2.25rem; height: 2.25rem;
+    border-radius: 0.5rem; color: var(--ink-2); transition: background 150ms, color 150ms;
+  }
+  .icon-btn:hover { background: var(--sunken); color: var(--ink); }
+  .icon-btn:disabled { opacity: 0.3; pointer-events: none; }
+
+  .toggle {
+    appearance: none; position: relative; flex-shrink: 0; cursor: pointer;
+    width: 2.75rem; height: 1.625rem; border-radius: 999px;
+    background: var(--line); transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .toggle::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 1.25rem; height: 1.25rem;
+    border-radius: 999px; background: #fff; box-shadow: 0 1px 3px rgb(21 33 27 / 0.3);
+    transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .toggle:checked { background: var(--enamel); }
+  .toggle:checked::after { transform: translateX(1.125rem); }
+  .toggle:disabled { opacity: 0.5; cursor: not-allowed; }
 }
