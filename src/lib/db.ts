@@ -7,9 +7,10 @@ declare global {
 
 function create() {
   const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set");
+  // ไม่ throw ตอน import เพื่อให้ build ผ่านได้ก่อนตั้งค่า env — จะ error ตอน query แทน
+  if (!url) console.error("DATABASE_URL is not set — add it in Vercel → Settings → Environment Variables");
   // prepare:false ใช้ได้กับ Supabase pooler (transaction mode, port 6543)
-  return postgres(url, { prepare: false, max: 5, idle_timeout: 20 });
+  return postgres(url ?? "postgres://missing-database-url@127.0.0.1:1/none", { prepare: false, max: 5, idle_timeout: 20 });
 }
 
 // reuse connection ระหว่าง hot-reload ตอน dev
