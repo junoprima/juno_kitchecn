@@ -51,4 +51,4 @@ npm run db:setup             # หรือ npm run db:seed เพื่อใ�
 npm run dev
 ```
 
-> หมายเหตุ Supabase free: ถ้าไม่มีใครใช้งาน 7 วัน โปรเจกต์จะถูก pause — เข้า dashboard กด Restore ได้ฟรี
+> หมายเหตุ Supabase free: ถ้าไม่มีใครใช้งาน 7 วัน โปรเจกต์จะถูก pause — มี Vercel Cron (`vercel.json`) เรียก `/api/keepalive` ทุกวัน 10:17 น. เวลาไทยกันไว้แล้ว ถ้ายังโดน pause เข้า dashboard กด Restore ได้ฟรี
