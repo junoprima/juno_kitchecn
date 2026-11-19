@@ -1,5 +1,6 @@
 import "server-only";
 import { sql } from "./db";
+import { deliveryDateFor } from "./dates";
 import type { MenuItem, Order, ShopSettings } from "./types";
 
 export async function getSettings(): Promise<ShopSettings> {
@@ -56,4 +57,52 @@ export async function getOrderDates() {
     from orders where status <> 'cancelled'
     group by delivery_date order by delivery_date desc limit 14`;
   return rows;
+}
+
+/* ---------------- รอบส่ง ---------------- */
+
+export type DeliveryDay = { date: string; note: string; items: { menu_item_id: string; daily_limit: number | null }[] };
+
+/** รอบพิเศษที่แม่เปิดไว้ ตั้งแต่วันที่ fromDate เป็นต้นไป */
+export async function getDeliveryDays(fromDate: string) {
+  return sql<DeliveryDay[]>`
+    select to_char(d.date, 'YYYY-MM-DD') as date, d.note,
+           coalesce(json_agg(json_build_object('menu_item_id', i.menu_item_id, 'daily_limit', i.daily_limit))
+                    filter (where i.menu_item_id is not null), '[]') as items
+    from delivery_days d left join delivery_day_items i on i.date = d.date
+    where d.date >= ${fromDate}
+    group by d.date order by d.date`;
+}
+
+export async function getDeliveryDay(date: string) {
+  const [d] = await getDeliveryDays(date);
+  return d && d.date === date ? d : null;
+}
+
+export type Round = { date: string; special: boolean; note: string };
+
+/**
+ * วันส่งที่ลูกค้าเลือกได้ตอนนี้
+ * - รอบปกติ: วันส่งถัดไปตามเวลาปิดรับ (ถ้าเปิดรับออเดอร์รายวันอยู่)
+ * - รอบพิเศษ: ทุกวันที่แม่เปิดไว้ ที่ยังไม่เลยเวลาปิดรับ
+ */
+export async function getOpenRounds(settings: ShopSettings): Promise<Round[]> {
+  const next = deliveryDateFor(settings.cutoff_time).date;
+  const special = await getDeliveryDays(next);
+  const rounds = new Map<string, Round>();
+  if (settings.accepting_orders) rounds.set(next, { date: next, special: false, note: "" });
+  for (const d of special) rounds.set(d.date, { date: d.date, special: true, note: d.note });
+  return [...rounds.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/** เมนูของวันส่งนั้น พร้อมจำนวนที่เหลือ */
+export async function getMenuForDate(date: string) {
+  const [day, all, booked] = await Promise.all([getDeliveryDay(date), getMenu(), getBookedQty(date)]);
+  const picked = day ? new Map(day.items.map((i) => [i.menu_item_id, i.daily_limit])) : null;
+  return all
+    .filter((m) => (picked ? picked.has(m.id) : m.is_available))
+    .map((m) => {
+      const limit = picked?.get(m.id) ?? m.daily_limit;
+      return { ...m, daily_limit: limit, left: limit == null ? null : Math.max(0, limit - (booked.get(m.id) ?? 0)) };
+    });
 }

@@ -6,8 +6,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { sql } from "./db";
 import { ADMIN_COOKIE, passwordMatches, requireAdmin, sessionToken } from "./auth";
-import { deliveryDateFor } from "./dates";
-import { getSettings } from "./queries";
+import { addDays, bangkokNow } from "./dates";
+import { getDeliveryDay, getOpenRounds, getSettings } from "./queries";
 import type { OrderStatus } from "./types";
 
 /* ---------------- ลูกค้า: สั่งอาหาร ---------------- */
@@ -35,8 +35,13 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
   if (wanted.length === 0) return { error: "ยังไม่ได้เลือกเมนู" };
 
   const settings = await getSettings();
-  if (!settings.accepting_orders) return { error: "ตอนนี้แม่ปิดรับออเดอร์อยู่ ไว้มาสั่งใหม่นะ" };
-  const { date } = deliveryDateFor(settings.cutoff_time);
+  const rounds = await getOpenRounds(settings);
+  const date = String(form.get("delivery_date") ?? "");
+  if (!rounds.some((r) => r.date === date))
+    return { error: rounds.length ? "รอบส่งนี้ปิดรับแล้ว ลองรีเฟรชหน้าแล้วเลือกวันใหม่" : "ตอนนี้แม่ปิดรับออเดอร์อยู่ ไว้มาสั่งใหม่นะ" };
+  // รอบพิเศษ: ขายเฉพาะเมนูที่แม่เลือกไว้ และใช้จำนวนจำกัดของวันนั้น
+  const day = await getDeliveryDay(date);
+  const dayItems = day ? new Map(day.items.map((i) => [i.menu_item_id, i.daily_limit])) : null;
 
   let orderId: string;
   try {
@@ -56,9 +61,11 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
 
       const lines = wanted.map(([id, qty]) => {
         const it = items.find((i) => i.id === id);
-        if (!it || !it.is_available) throw new UserError("มีเมนูที่แม่เพิ่งปิดไป ลองรีเฟรชหน้าแล้วเลือกใหม่");
-        if (it.daily_limit != null) {
-          const left = it.daily_limit - (bookedMap.get(id) ?? 0);
+        const sellable = it && (dayItems ? dayItems.has(id) : it.is_available);
+        if (!it || !sellable) throw new UserError("มีเมนูที่แม่เพิ่งปิดไป ลองรีเฟรชหน้าแล้วเลือกใหม่");
+        const limit = dayItems?.get(id) ?? it.daily_limit;
+        if (limit != null) {
+          const left = limit - (bookedMap.get(id) ?? 0);
           if (qty > left)
             throw new UserError(left <= 0 ? `${it.name} หมดแล้วสำหรับรอบนี้` : `${it.name} เหลือแค่ ${left} ที่`);
         }
@@ -198,5 +205,43 @@ export async function setOrderStatus(id: string, status: OrderStatus) {
   await requireAdmin();
   if (!STATUSES.includes(status)) return;
   await sql`update orders set status = ${status} where id = ${id}`;
+  revalidatePath("/", "layout");
+}
+
+/* ---------------- แอดมิน: รอบส่งพิเศษ ---------------- */
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export async function saveDeliveryDay(_prev: FormState, form: FormData): Promise<FormState> {
+  await requireAdmin();
+  const date = String(form.get("date") ?? "");
+  if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(date))) return { error: "เลือกวันส่งก่อน" };
+  if (date < addDays(bangkokNow().date, 1)) return { error: "วันส่งต้องเป็นพรุ่งนี้หรือหลังจากนั้น" };
+  const note = String(form.get("note") ?? "").trim().slice(0, 200);
+  const ids = form.getAll("item").map(String).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (ids.length === 0) return { error: "ติ๊กเลือกเมนูของวันนี้อย่างน้อย 1 อย่าง" };
+
+  const rows: { date: string; menu_item_id: string; daily_limit: number | null }[] = [];
+  for (const id of ids) {
+    const raw = String(form.get(`limit_${id}`) ?? "").trim();
+    const n = raw === "" ? null : Math.round(Number(raw));
+    if (n !== null && (!Number.isFinite(n) || n < 1)) return { error: "จำนวนจำกัดต้องเป็น 1 ขึ้นไป หรือเว้นว่าง" };
+    rows.push({ date, menu_item_id: id, daily_limit: n });
+  }
+
+  await sql.begin(async (tx) => {
+    await tx`insert into delivery_days (date, note) values (${date}, ${note})
+             on conflict (date) do update set note = excluded.note`;
+    await tx`delete from delivery_day_items where date = ${date}`;
+    await tx`insert into delivery_day_items ${tx(rows)}`;
+  });
+  revalidatePath("/", "layout");
+  return { ok: Date.now() };
+}
+
+export async function deleteDeliveryDay(date: string) {
+  await requireAdmin();
+  if (!ISO_DATE.test(date)) return;
+  await sql`delete from delivery_days where date = ${date}`;
   revalidatePath("/", "layout");
 }

@@ -58,3 +58,35 @@ alter table menu_items    enable row level security;
 alter table shop_settings enable row level security;
 alter table orders        enable row level security;
 alter table order_items   enable row level security;
+
+-- รอบส่งพิเศษ: แม่เปิดรับล่วงหน้าเป็นรายวัน พร้อมเมนูเฉพาะของวันนั้น
+create table if not exists delivery_days (
+  date       date primary key,
+  note       text not null default '',            -- ข้อความถึงลูกค้าสำหรับวันนั้น
+  created_at timestamptz not null default now()
+);
+
+create table if not exists delivery_day_items (
+  date         date not null references delivery_days(date) on delete cascade,
+  menu_item_id uuid not null references menu_items(id) on delete cascade,
+  daily_limit  integer check (daily_limit is null or daily_limit > 0), -- null = ใช้ค่าจำกัดของเมนู
+  primary key (date, menu_item_id)
+);
+create index if not exists delivery_day_items_menu_item_id_idx on delivery_day_items (menu_item_id);
+
+alter table delivery_days      enable row level security;
+alter table delivery_day_items enable row level security;
+
+-- บน Supabase แอปใช้ role app_web (ถ้ามี) — ให้สิทธิ์เหมือนตารางอื่น
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'app_web') then
+    grant select, insert, update, delete on delivery_days, delivery_day_items to app_web;
+    if not exists (select 1 from pg_policies where tablename = 'delivery_days' and policyname = 'app_web_all') then
+      create policy app_web_all on delivery_days for all to app_web using (true) with check (true);
+    end if;
+    if not exists (select 1 from pg_policies where tablename = 'delivery_day_items' and policyname = 'app_web_all') then
+      create policy app_web_all on delivery_day_items for all to app_web using (true) with check (true);
+    end if;
+  end if;
+end $$;

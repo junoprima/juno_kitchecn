@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getOrderDates, getOrdersForDate, getSettings } from "@/lib/queries";
+import { getDeliveryDays, getOrderDates, getOrdersForDate, getSettings } from "@/lib/queries";
 import { addDays, baht, bangkokNow, deliveryDateFor, formatThaiDate, relativeDayLabel } from "@/lib/dates";
 import { OrderCard } from "./OrderCard";
 
@@ -10,7 +10,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const q = (await searchParams).date;
   const date = q && /^\d{4}-\d{2}-\d{2}$/.test(q) ? q : addDays(today, 1);
 
-  const [orders, dates] = await Promise.all([getOrdersForDate(date), getOrderDates()]);
+  const [orders, dates, specials] = await Promise.all([getOrdersForDate(date), getOrderDates(), getDeliveryDays(today)]);
   const live = orders.filter((o) => o.status !== "cancelled");
 
   // รายการที่ต้องทำ: รวมจำนวนต่อเมนู
@@ -19,7 +19,7 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const prepList = [...prep.entries()].sort((a, b) => b[1] - a[1]);
   const revenue = live.reduce((s, o) => s + o.total, 0);
 
-  const chips = Array.from(new Set([today, addDays(today, 1), next, ...dates.map((d) => d.d)])).sort().reverse();
+  const chips = Array.from(new Set([today, addDays(today, 1), next, ...dates.map((d) => d.d), ...specials.map((d) => d.date)])).sort().reverse();
 
   return (
     <>

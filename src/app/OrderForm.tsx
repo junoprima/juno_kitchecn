@@ -28,7 +28,7 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
     <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_22rem] lg:items-start">
       {/* เมนู */}
       <section aria-labelledby="menu-h">
-        <h2 id="menu-h" className="font-display text-xl font-semibold">เมนูรอบนี้</h2>
+        <h2 id="menu-h" className="font-display text-xl font-semibold">เมนูส่ง{formatThaiDate(deliveryDate, "short")}</h2>
         <ul className="mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-sm">
           {items.map((it) => {
             const qty = cart[it.id] ?? 0;
@@ -84,6 +84,7 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
       {/* ใบสั่ง */}
       <form id="slip" action={action} className="slip slip-torn scroll-mt-6 px-5 py-7 lg:sticky lg:top-6">
         <input type="hidden" name="cart" value={JSON.stringify(cart)} />
+        <input type="hidden" name="delivery_date" value={deliveryDate} />
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-xl font-semibold">ใบสั่ง</h2>
           <span className="text-sm text-ink-2">ส่ง{formatThaiDate(deliveryDate, "short")}</span>

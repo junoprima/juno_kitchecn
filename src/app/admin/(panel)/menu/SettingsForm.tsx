@@ -10,8 +10,8 @@ export function SettingsForm({ settings }: { settings: ShopSettings }) {
     <form action={action} className="mt-3 space-y-4 rounded-2xl bg-surface p-5 shadow-sm">
       <label className="flex items-center justify-between gap-3">
         <span>
-          <span className="block font-medium">เปิดรับออเดอร์</span>
-          <span className="text-sm text-ink-2">ปิดไว้ช่วงที่แม่หยุด</span>
+          <span className="block font-medium">เปิดรับออเดอร์รอบปกติ</span>
+          <span className="text-sm text-ink-2">ส่งพรุ่งนี้ทุกวัน ปิดไว้ช่วงที่แม่หยุด (รอบพิเศษไม่ปิดตาม)</span>
         </span>
         <input type="checkbox" name="accepting_orders" defaultChecked={settings.accepting_orders} className="toggle" />
       </label>
