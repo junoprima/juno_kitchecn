@@ -4,11 +4,13 @@ import { randomInt } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import type postgres from "postgres";
 import { sql } from "./db";
 import { ADMIN_COOKIE, passwordMatches, requireAdmin, sessionToken } from "./auth";
 import { addDays, bangkokNow } from "./dates";
 import { getDeliveryDay, getOpenRounds, getSettings } from "./queries";
-import type { OrderStatus } from "./types";
+import { resolvePicks, sanitizeGroups } from "./options";
+import type { ChosenOption, OptionGroup, OrderStatus } from "./types";
 
 /* ---------------- ลูกค้า: สั่งอาหาร ---------------- */
 
@@ -21,17 +23,19 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
   const name = String(form.get("customer_name") ?? "").trim().slice(0, 60);
   const phone = String(form.get("phone") ?? "").trim().slice(0, 20);
   const note = String(form.get("note") ?? "").trim().slice(0, 300);
-  let cart: Record<string, number>;
+  // cart: [{ id, qty, picks }] — เมนูเดียวกันแต่ตัวเลือกต่างกันเป็นคนละบรรทัด
+  let cart: unknown;
   try {
-    cart = JSON.parse(String(form.get("cart") ?? "{}"));
+    cart = JSON.parse(String(form.get("cart") ?? "[]"));
   } catch {
     return { error: "ข้อมูลตะกร้าไม่ถูกต้อง ลองรีเฟรชหน้าแล้วสั่งใหม่" };
   }
 
   if (!name) return { error: "ใส่ชื่อผู้สั่งก่อนนะ แม่จะได้รู้ว่าเป็นของใคร" };
-  const wanted = Object.entries(cart)
-    .map(([id, q]) => [id, Math.floor(Number(q))] as const)
-    .filter(([, q]) => q > 0 && q <= 99);
+  const wanted = (Array.isArray(cart) ? cart : [])
+    .slice(0, 50)
+    .map((l) => ({ id: String(l?.id ?? ""), qty: Math.floor(Number(l?.qty)), picks: l?.picks }))
+    .filter((l) => /^[0-9a-f-]{36}$/i.test(l.id) && l.qty > 0 && l.qty <= 99);
   if (wanted.length === 0) return { error: "ยังไม่ได้เลือกเมนู" };
 
   const settings = await getSettings();
@@ -46,10 +50,12 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
   let orderId: string;
   try {
     orderId = await sql.begin(async (tx) => {
-      const ids = wanted.map(([id]) => id);
+      const ids = [...new Set(wanted.map((l) => l.id))];
       // lock เมนูไว้ กันสั่งเกินจำนวนเมื่อมีคนกดพร้อมกัน
-      const items = await tx<{ id: string; name: string; price: number; daily_limit: number | null; is_available: boolean }[]>`
-        select id, name, price, daily_limit, is_available from menu_items
+      const items = await tx<
+        { id: string; name: string; price: number; daily_limit: number | null; is_available: boolean; options: OptionGroup[] }[]
+      >`
+        select id, name, price, daily_limit, is_available, options from menu_items
         where id = any(${ids}::uuid[]) for update`;
       const booked = await tx<{ menu_item_id: string; qty: number }[]>`
         select oi.menu_item_id, sum(oi.qty)::int as qty
@@ -59,17 +65,23 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
         group by oi.menu_item_id`;
       const bookedMap = new Map(booked.map((b) => [b.menu_item_id, b.qty]));
 
-      const lines = wanted.map(([id, qty]) => {
+      // รวมจำนวนต่อเมนู (ทุกตัวเลือก) ไว้เช็คจำนวนจำกัด
+      const qtyByItem = new Map<string, number>();
+      for (const l of wanted) qtyByItem.set(l.id, (qtyByItem.get(l.id) ?? 0) + l.qty);
+
+      const lines = wanted.map(({ id, qty, picks }) => {
         const it = items.find((i) => i.id === id);
         const sellable = it && (dayItems ? dayItems.has(id) : it.is_available);
         if (!it || !sellable) throw new UserError("มีเมนูที่แม่เพิ่งปิดไป ลองรีเฟรชหน้าแล้วเลือกใหม่");
         const limit = dayItems?.get(id) ?? it.daily_limit;
         if (limit != null) {
           const left = limit - (bookedMap.get(id) ?? 0);
-          if (qty > left)
+          if ((qtyByItem.get(id) ?? qty) > left)
             throw new UserError(left <= 0 ? `${it.name} หมดแล้วสำหรับรอบนี้` : `${it.name} เหลือแค่ ${left} ที่`);
         }
-        return { id, name: it.name, price: it.price, qty };
+        const opt = resolvePicks(it.options ?? [], picks);
+        if ("error" in opt) throw new UserError(`${it.name}: ${opt.error}`);
+        return { id, name: it.name, price: it.price + opt.extra, qty, options: opt.chosen };
       });
       const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
 
@@ -83,7 +95,14 @@ export async function placeOrder(_prev: PlaceOrderState, form: FormData): Promis
       if (!row) throw new Error("could not allocate order code");
 
       await tx`insert into order_items ${tx(
-        lines.map((l) => ({ order_id: row!.id, menu_item_id: l.id, name: l.name, price: l.price, qty: l.qty })),
+        lines.map((l) => ({
+          order_id: row!.id,
+          menu_item_id: l.id,
+          name: l.name,
+          price: l.price,
+          qty: l.qty,
+          options: tx.json(l.options as ChosenOption[] as unknown as postgres.JSONValue),
+        })),
       )}`;
       return row.id;
     });
@@ -131,7 +150,15 @@ function readMenuForm(form: FormData) {
   if (!Number.isFinite(price) || price < 0) return { error: "ราคาต้องเป็นตัวเลข" } as const;
   if (daily_limit !== null && (!Number.isFinite(daily_limit) || daily_limit < 1))
     return { error: "จำนวนต่อวันต้องเป็น 1 ขึ้นไป หรือเว้นว่างถ้าไม่จำกัด" } as const;
-  return { data: { name, description, price, daily_limit } } as const;
+  let rawOptions: unknown = [];
+  try {
+    rawOptions = JSON.parse(String(form.get("options") ?? "[]"));
+  } catch {
+    return { error: "ตัวเลือกไม่ถูกต้อง" } as const;
+  }
+  const options = sanitizeGroups(rawOptions);
+  if ("error" in options) return { error: options.error } as const;
+  return { data: { name, description, price, daily_limit, options } } as const;
 }
 
 export type FormState = { error?: string; ok?: number } | undefined;
@@ -141,8 +168,8 @@ export async function createMenuItem(_prev: FormState, form: FormData): Promise<
   const r = readMenuForm(form);
   if ("error" in r) return { error: r.error };
   await sql`
-    insert into menu_items (name, description, price, daily_limit, sort_order)
-    values (${r.data.name}, ${r.data.description}, ${r.data.price}, ${r.data.daily_limit},
+    insert into menu_items (name, description, price, daily_limit, options, sort_order)
+    values (${r.data.name}, ${r.data.description}, ${r.data.price}, ${r.data.daily_limit}, ${sql.json(r.data.options as unknown as postgres.JSONValue)},
             (select coalesce(max(sort_order), 0) + 1 from menu_items))`;
   revalidatePath("/", "layout");
   return { ok: Date.now() };
@@ -155,7 +182,8 @@ export async function updateMenuItem(_prev: FormState, form: FormData): Promise<
   if ("error" in r) return { error: r.error };
   await sql`
     update menu_items set name = ${r.data.name}, description = ${r.data.description},
-      price = ${r.data.price}, daily_limit = ${r.data.daily_limit}
+      price = ${r.data.price}, daily_limit = ${r.data.daily_limit},
+      options = ${sql.json(r.data.options as unknown as postgres.JSONValue)}
     where id = ${id}`;
   revalidatePath("/", "layout");
   return { ok: Date.now() };

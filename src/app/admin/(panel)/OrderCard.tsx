@@ -4,6 +4,7 @@ import { useTransition } from "react";
 import { setOrderStatus } from "@/lib/actions";
 import { baht } from "@/lib/dates";
 import { StatusBadge } from "@/components/StatusBadge";
+import { OrderLines } from "@/components/OrderLines";
 import type { Order, OrderStatus } from "@/lib/types";
 import { Phone } from "lucide-react";
 
@@ -35,15 +36,7 @@ export function OrderCard({ order: o, index }: { order: Order; index: number }) 
         <StatusBadge status={o.status} />
       </div>
 
-      <ul className="mt-3 space-y-0.5">
-        {o.items.map((l, i) => (
-          <li key={i} className="flex gap-2">
-            <span className="w-7 shrink-0 font-semibold text-enamel">{l.qty}×</span>
-            <span className="flex-1">{l.name}</span>
-            <span className="text-ink-2">{baht(l.price * l.qty)}</span>
-          </li>
-        ))}
-      </ul>
+      <OrderLines items={o.items} className="mt-3 space-y-1" />
       {o.note && <p className="mt-2 rounded-lg bg-marigold/20 px-3 py-1.5 text-sm">“{o.note}”</p>}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">

@@ -4,6 +4,7 @@ import { getOrder } from "@/lib/queries";
 import { baht } from "@/lib/dates";
 import { DateStamp } from "@/components/DateStamp";
 import { StatusBadge } from "@/components/StatusBadge";
+import { OrderLines } from "@/components/OrderLines";
 
 export const dynamic = "force-dynamic";
 
@@ -30,15 +31,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           <StatusBadge status={order.status} />
         </div>
         <div className="rule-dashed mt-5" />
-        <ul className="space-y-1.5 py-4">
-          {order.items.map((l, i) => (
-            <li key={i} className="flex gap-2">
-              <span className="w-7 shrink-0 font-semibold text-enamel">{l.qty}×</span>
-              <span className="min-w-0 flex-1">{l.name}</span>
-              <span>{baht(l.price * l.qty)}</span>
-            </li>
-          ))}
-        </ul>
+        <OrderLines items={order.items} className="space-y-1.5 py-4" />
         <div className="rule-dashed" />
         <p className="mt-3 flex items-baseline justify-between">
           <span className="text-ink-2">รวม</span>

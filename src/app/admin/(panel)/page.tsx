@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getDeliveryDays, getOrderDates, getOrdersForDate, getSettings } from "@/lib/queries";
 import { addDays, baht, bangkokNow, deliveryDateFor, formatThaiDate, relativeDayLabel } from "@/lib/dates";
 import { OrderCard } from "./OrderCard";
+import { optionText } from "@/lib/options";
 
 export default async function OrdersPage({ searchParams }: { searchParams: Promise<{ date?: string }> }) {
   const settings = await getSettings();
@@ -14,9 +15,17 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
   const live = orders.filter((o) => o.status !== "cancelled");
 
   // รายการที่ต้องทำ: รวมจำนวนต่อเมนู
-  const prep = new Map<string, number>();
-  for (const o of live) for (const l of o.items) prep.set(l.name, (prep.get(l.name) ?? 0) + l.qty);
-  const prepList = [...prep.entries()].sort((a, b) => b[1] - a[1]);
+  // รายการที่ต้องทำ: รวมจำนวนต่อเมนู แยกย่อยตามตัวเลือก
+  const prep = new Map<string, { qty: number; variants: Map<string, number> }>();
+  for (const o of live)
+    for (const l of o.items) {
+      const p = prep.get(l.name) ?? { qty: 0, variants: new Map<string, number>() };
+      p.qty += l.qty;
+      const v = optionText(l.options ?? []);
+      if (v) p.variants.set(v, (p.variants.get(v) ?? 0) + l.qty);
+      prep.set(l.name, p);
+    }
+  const prepList = [...prep.entries()].sort((a, b) => b[1].qty - a[1].qty);
   const revenue = live.reduce((s, o) => s + o.total, 0);
 
   const chips = Array.from(new Set([today, addDays(today, 1), next, ...dates.map((d) => d.d), ...specials.map((d) => d.date)])).sort().reverse();
@@ -57,10 +66,19 @@ export default async function OrdersPage({ searchParams }: { searchParams: Promi
             <p className="py-4 text-ink-3">ยังไม่มีออเดอร์</p>
           ) : (
             <ul className="space-y-1 pt-3">
-              {prepList.map(([name, qty]) => (
-                <li key={name} className="flex gap-3">
-                  <span className="w-8 shrink-0 text-right font-display text-lg font-semibold text-enamel">{qty}</span>
-                  <span className="pt-0.5">{name}</span>
+              {prepList.map(([name, p]) => (
+                <li key={name}>
+                  <div className="flex gap-3">
+                    <span className="w-8 shrink-0 text-right font-display text-lg font-semibold text-enamel">{p.qty}</span>
+                    <span className="pt-0.5">{name}</span>
+                  </div>
+                  {p.variants.size > 0 && (
+                    <ul className="mb-1 ml-11 text-sm text-ink-2">
+                      {[...p.variants.entries()].map(([v, n]) => (
+                        <li key={v}>{n} × {v}</li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

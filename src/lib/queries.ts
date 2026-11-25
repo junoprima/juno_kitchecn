@@ -12,7 +12,7 @@ export async function getSettings(): Promise<ShopSettings> {
 
 export async function getMenu(opts: { onlyAvailable?: boolean } = {}) {
   return sql<MenuItem[]>`
-    select id, name, description, price, daily_limit, is_available, sort_order
+    select id, name, description, price, daily_limit, is_available, sort_order, options
     from menu_items
     ${opts.onlyAvailable ? sql`where is_available` : sql``}
     order by sort_order, created_at`;
@@ -33,8 +33,8 @@ const orderSelect = (where: ReturnType<typeof sql>) => sql<Order[]>`
   select o.id, o.code, o.customer_name, o.phone, o.note,
          to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date,
          o.status, o.total, o.created_at,
-         coalesce(json_agg(json_build_object('name', oi.name, 'price', oi.price, 'qty', oi.qty)
-                  order by oi.name) filter (where oi.id is not null), '[]') as items
+         coalesce(json_agg(json_build_object('name', oi.name, 'price', oi.price, 'qty', oi.qty, 'options', oi.options)
+                  order by oi.name, oi.id) filter (where oi.id is not null), '[]') as items
   from orders o left join order_items oi on oi.order_id = o.id
   ${where}
   group by o.id

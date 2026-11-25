@@ -90,3 +90,9 @@ begin
     end if;
   end if;
 end $$;
+
+-- ตัวเลือกเมนู เช่น ไข่ต้ม/ไข่ดาว, +พริกน้ำปลา +5
+-- [{ "name": "ไข่", "type": "single"|"multi", "required": true, "choices": [{ "name": "ไข่ดาว", "price": 0 }] }]
+alter table menu_items  add column if not exists options jsonb not null default '[]';
+-- ตัวเลือกที่ลูกค้าเลือก ณ ตอนสั่ง: [{ "group": "ไข่", "name": "ไข่ดาว", "price": 0 }] (price ใน order_items รวมค่าตัวเลือกแล้ว)
+alter table order_items add column if not exists options jsonb not null default '[]';

@@ -1,28 +1,48 @@
 "use client";
 
 import { useActionState, useMemo, useState } from "react";
-import { ArrowRight, Minus, Plus, ReceiptText, LoaderCircle } from "lucide-react";
+import { ArrowRight, Check, ChevronUp, Minus, Plus, ReceiptText, LoaderCircle } from "lucide-react";
 import { placeOrder } from "@/lib/actions";
 import { baht, formatThaiDate } from "@/lib/dates";
+import { emptyPicks, optionText, resolvePicks, type Picks } from "@/lib/options";
 import type { MenuItem } from "@/lib/types";
 
 type Item = MenuItem & { left: number | null };
+type Line = { key: string; id: string; picks: Picks; qty: number };
+
+const lineKey = (id: string, picks: Picks) => `${id}|${JSON.stringify(picks)}`;
 
 export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate: string }) {
-  const [cart, setCart] = useState<Record<string, number>>({});
+  const [cart, setCart] = useState<Line[]>([]);
+  const [open, setOpen] = useState<string | null>(null); // เมนูที่กำลังเลือกตัวเลือก
   const [state, action, pending] = useActionState(placeOrder, undefined);
 
-  const lines = useMemo(
-    () => items.filter((i) => cart[i.id] > 0).map((i) => ({ ...i, qty: cart[i.id] })),
-    [items, cart],
-  );
-  const total = lines.reduce((s, l) => s + l.price * l.qty, 0);
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const qtyOf = (id: string) => cart.reduce((s, l) => (l.id === id ? s + l.qty : s), 0);
+  const maxOf = (it: Item) => Math.min(99, it.left ?? 99);
+
+  const lines = cart.flatMap((l) => {
+    const it = byId.get(l.id);
+    if (!it) return [];
+    const r = resolvePicks(it.options, l.picks);
+    if ("error" in r) return [];
+    return [{ ...l, item: it, unit: it.price + r.extra, label: optionText(r.chosen, it.options) }];
+  });
+  const total = lines.reduce((s, l) => s + l.unit * l.qty, 0);
   const count = lines.reduce((s, l) => s + l.qty, 0);
 
-  const setQty = (it: Item, q: number) => {
-    const max = Math.min(99, it.left ?? 99);
-    setCart((c) => ({ ...c, [it.id]: Math.max(0, Math.min(max, q)) }));
-  };
+  /** เพิ่ม/ลดจำนวนของบรรทัด (สร้างใหม่ถ้ายังไม่มี) โดยไม่ให้เกินจำนวนที่เหลือ */
+  const bump = (id: string, picks: Picks, delta: number) =>
+    setCart((c) => {
+      const it = byId.get(id);
+      if (!it) return c;
+      const key = lineKey(id, picks);
+      const room = maxOf(it) - c.reduce((s, l) => (l.id === id ? s + l.qty : s), 0);
+      const d = Math.min(delta, room);
+      const hit = c.find((l) => l.key === key);
+      if (!hit) return d > 0 ? [...c, { key, id, picks, qty: d }] : c;
+      return c.map((l) => (l.key === key ? { ...l, qty: l.qty + d } : l)).filter((l) => l.qty > 0);
+    });
 
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_22rem] lg:items-start">
@@ -31,50 +51,70 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
         <h2 id="menu-h" className="font-display text-xl font-semibold">เมนูส่ง{formatThaiDate(deliveryDate, "short")}</h2>
         <ul className="mt-3 divide-y divide-line overflow-hidden rounded-2xl bg-surface shadow-sm">
           {items.map((it) => {
-            const qty = cart[it.id] ?? 0;
+            const qty = qtyOf(it.id);
             const soldOut = it.left === 0;
+            const full = qty >= maxOf(it);
+            const hasOptions = it.options.length > 0;
+            const isOpen = open === it.id;
+            const plain = lineKey(it.id, []);
             return (
-              <li key={it.id} className={`flex items-center gap-4 px-4 py-4 sm:px-5 ${qty > 0 ? "bg-enamel-tint/50" : ""}`}>
-                <div className="min-w-0 flex-1">
-                  <p className={`font-medium leading-snug ${soldOut ? "text-ink-3 line-through" : ""}`}>{it.name}</p>
-                  {it.description && <p className="text-sm text-ink-2">{it.description}</p>}
-                  <p className="mt-1 flex flex-wrap items-baseline gap-x-3 text-sm">
-                    <span className="font-display text-base font-semibold text-enamel-deep">{baht(it.price)}</span>
-                    {soldOut ? (
-                      <span className="font-medium text-chili">หมดแล้ว</span>
-                    ) : it.left != null && it.left <= 5 ? (
-                      <span className="font-medium text-chili">เหลือ {it.left} ที่</span>
-                    ) : it.left != null ? (
-                      <span className="text-ink-3">เหลือ {it.left} ที่</span>
-                    ) : null}
-                  </p>
-                </div>
-                {!soldOut &&
-                  (qty === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setQty(it, 1)}
-                      className="inline-flex h-11 items-center gap-1.5 rounded-full border border-enamel px-4 font-medium text-enamel transition-colors hover:bg-enamel hover:text-white"
-                    >
-                      <Plus className="size-4" aria-hidden /> เพิ่ม
-                    </button>
-                  ) : (
-                    <div className="flex items-center rounded-full bg-enamel text-white" role="group" aria-label={`จำนวน ${it.name}`}>
-                      <button type="button" onClick={() => setQty(it, qty - 1)} className="grid size-11 place-items-center rounded-full hover:bg-enamel-deep" aria-label="ลด">
-                        <Minus className="size-4" />
-                      </button>
-                      <span className="w-6 text-center font-display text-lg font-semibold" aria-live="polite">{qty}</span>
+              <li key={it.id} className={qty > 0 ? "bg-enamel-tint/50" : ""}>
+                <div className="flex items-center gap-4 px-4 py-4 sm:px-5">
+                  <div className="min-w-0 flex-1">
+                    <p className={`font-medium leading-snug ${soldOut ? "text-ink-3 line-through" : ""}`}>{it.name}</p>
+                    {it.description && <p className="text-sm text-ink-2">{it.description}</p>}
+                    <p className="mt-1 flex flex-wrap items-baseline gap-x-3 text-sm">
+                      <span className="font-display text-base font-semibold text-enamel-deep">{baht(it.price)}</span>
+                      {soldOut ? (
+                        <span className="font-medium text-chili">หมดแล้ว</span>
+                      ) : it.left != null && it.left <= 5 ? (
+                        <span className="font-medium text-chili">เหลือ {it.left} ที่</span>
+                      ) : it.left != null ? (
+                        <span className="text-ink-3">เหลือ {it.left} ที่</span>
+                      ) : null}
+                      {hasOptions && qty > 0 && <span className="font-medium text-enamel">ในใบสั่ง {qty}</span>}
+                    </p>
+                  </div>
+                  {!soldOut &&
+                    (hasOptions ? (
                       <button
                         type="button"
-                        onClick={() => setQty(it, qty + 1)}
-                        disabled={it.left != null && qty >= it.left}
-                        className="grid size-11 place-items-center rounded-full hover:bg-enamel-deep disabled:opacity-40"
-                        aria-label="เพิ่ม"
+                        onClick={() => setOpen(isOpen ? null : it.id)}
+                        disabled={full && !isOpen}
+                        aria-expanded={isOpen}
+                        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-enamel px-4 font-medium text-enamel transition-colors hover:bg-enamel hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-enamel"
                       >
-                        <Plus className="size-4" />
+                        {isOpen ? <ChevronUp className="size-4" aria-hidden /> : <Plus className="size-4" aria-hidden />}
+                        {isOpen ? "ปิด" : "เพิ่ม"}
                       </button>
-                    </div>
-                  ))}
+                    ) : qty === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => bump(it.id, [], 1)}
+                        className="inline-flex h-11 shrink-0 items-center gap-1.5 rounded-full border border-enamel px-4 font-medium text-enamel transition-colors hover:bg-enamel hover:text-white"
+                      >
+                        <Plus className="size-4" aria-hidden /> เพิ่ม
+                      </button>
+                    ) : (
+                      <Stepper
+                        label={it.name}
+                        qty={cart.find((l) => l.key === plain)?.qty ?? 0}
+                        onMinus={() => bump(it.id, [], -1)}
+                        onPlus={() => bump(it.id, [], 1)}
+                        plusDisabled={full}
+                      />
+                    ))}
+                </div>
+                {hasOptions && isOpen && !soldOut && (
+                  <OptionPicker
+                    item={it}
+                    full={full}
+                    onAdd={(picks) => {
+                      bump(it.id, picks, 1);
+                      setOpen(null);
+                    }}
+                  />
+                )}
               </li>
             );
           })}
@@ -83,7 +123,7 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
 
       {/* ใบสั่ง */}
       <form id="slip" action={action} className="slip slip-torn scroll-mt-6 px-5 py-7 lg:sticky lg:top-6">
-        <input type="hidden" name="cart" value={JSON.stringify(cart)} />
+        <input type="hidden" name="cart" value={JSON.stringify(cart.map(({ id, qty, picks }) => ({ id, qty, picks })))} />
         <input type="hidden" name="delivery_date" value={deliveryDate} />
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="font-display text-xl font-semibold">ใบสั่ง</h2>
@@ -94,12 +134,29 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
         {lines.length === 0 ? (
           <p className="py-6 text-center text-ink-3">กด “เพิ่ม” ที่เมนูที่อยากได้</p>
         ) : (
-          <ul className="space-y-1.5 py-4">
+          <ul className="space-y-2.5 py-4">
             {lines.map((l) => (
-              <li key={l.id} className="flex gap-2 text-[0.95rem]">
-                <span className="w-7 shrink-0 font-semibold text-enamel">{l.qty}×</span>
-                <span className="min-w-0 flex-1">{l.name}</span>
-                <span>{baht(l.price * l.qty)}</span>
+              <li key={l.key} className="flex items-start gap-2 text-[0.95rem]">
+                <div className="min-w-0 flex-1">
+                  <p className="leading-snug">{l.item.name}</p>
+                  {l.label && <p className="text-sm leading-snug text-ink-2">{l.label}</p>}
+                  <div className="mt-1 flex items-center gap-1" role="group" aria-label={`จำนวน ${l.item.name}`}>
+                    <button type="button" onClick={() => bump(l.id, l.picks, -1)} className="grid size-8 place-items-center rounded-full border border-line hover:border-enamel" aria-label="ลด">
+                      <Minus className="size-3.5" />
+                    </button>
+                    <span className="w-7 text-center font-semibold text-enamel" aria-live="polite">{l.qty}</span>
+                    <button
+                      type="button"
+                      onClick={() => bump(l.id, l.picks, 1)}
+                      disabled={qtyOf(l.id) >= maxOf(l.item)}
+                      className="grid size-8 place-items-center rounded-full border border-line hover:border-enamel disabled:opacity-40"
+                      aria-label="เพิ่ม"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
+                  </div>
+                </div>
+                <span className="shrink-0">{baht(l.unit * l.qty)}</span>
               </li>
             ))}
           </ul>
@@ -146,6 +203,75 @@ export function OrderForm({ items, deliveryDate }: { items: Item[]; deliveryDate
           </a>
         </div>
       )}
+    </div>
+  );
+}
+
+function OptionPicker({ item, full, onAdd }: { item: Item; full: boolean; onAdd: (picks: Picks) => void }) {
+  const [picks, setPicks] = useState<Picks>(() => emptyPicks(item.options));
+  const r = resolvePicks(item.options, picks);
+  const unit = item.price + ("error" in r ? 0 : r.extra);
+
+  const choose = (gi: number, ci: number, single: boolean) =>
+    setPicks((p) =>
+      p.map((sel, i) => {
+        if (i !== gi) return sel;
+        if (single) return sel[0] === ci && !item.options[gi].required ? [] : [ci];
+        return sel.includes(ci) ? sel.filter((x) => x !== ci) : [...sel, ci].sort((a, b) => a - b);
+      }),
+    );
+
+  return (
+    <div className="space-y-4 border-t border-dashed border-line px-4 pb-4 pt-3 sm:px-5">
+      {item.options.map((g, gi) => {
+        const single = g.type === "single";
+        return (
+          <fieldset key={gi}>
+            <legend className="mb-2 text-sm">
+              <span className="font-medium">{g.name}</span>
+              <span className="text-ink-3"> · {single ? (g.required ? "เลือก 1 อย่าง" : "เลือกได้ 1 อย่าง ไม่บังคับ") : "เลือกได้หลายอย่าง"}</span>
+            </legend>
+            <div className="flex flex-wrap gap-2">
+              {g.choices.map((c, ci) => {
+                const on = picks[gi]?.includes(ci);
+                return (
+                  <button
+                    key={ci}
+                    type="button"
+                    role={single ? "radio" : "checkbox"}
+                    aria-checked={on}
+                    onClick={() => choose(gi, ci, single)}
+                    className={`inline-flex min-h-10 items-center gap-1.5 rounded-full border px-3.5 text-sm transition-colors ${
+                      on ? "border-enamel bg-enamel text-white" : "border-line bg-surface hover:border-enamel"
+                    }`}
+                  >
+                    {on && <Check className="size-3.5" aria-hidden />}
+                    {c.name}
+                    {c.price > 0 && <span className={on ? "text-white/80" : "text-ink-3"}>+{baht(c.price)}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+        );
+      })}
+      <button type="button" disabled={"error" in r || full} onClick={() => onAdd(picks)} className="btn-primary w-full sm:w-auto">
+        <Plus className="size-4" aria-hidden /> ใส่ใบสั่ง · {baht(unit)}
+      </button>
+    </div>
+  );
+}
+
+function Stepper({ label, qty, onMinus, onPlus, plusDisabled }: { label: string; qty: number; onMinus: () => void; onPlus: () => void; plusDisabled: boolean }) {
+  return (
+    <div className="flex shrink-0 items-center rounded-full bg-enamel text-white" role="group" aria-label={`จำนวน ${label}`}>
+      <button type="button" onClick={onMinus} className="grid size-11 place-items-center rounded-full hover:bg-enamel-deep" aria-label="ลด">
+        <Minus className="size-4" />
+      </button>
+      <span className="w-6 text-center font-display text-lg font-semibold" aria-live="polite">{qty}</span>
+      <button type="button" onClick={onPlus} disabled={plusDisabled} className="grid size-11 place-items-center rounded-full hover:bg-enamel-deep disabled:opacity-40" aria-label="เพิ่ม">
+        <Plus className="size-4" />
+      </button>
     </div>
   );
 }

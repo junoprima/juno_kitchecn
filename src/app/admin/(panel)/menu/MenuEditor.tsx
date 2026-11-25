@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, Pencil, Plus, Trash2 } from "lucide-react";
 import { createMenuItem, deleteMenuItem, moveMenuItem, toggleMenuItem, updateMenuItem, type FormState } from "@/lib/actions";
 import { baht } from "@/lib/dates";
 import type { MenuItem } from "@/lib/types";
+import { OptionsEditor } from "./OptionsEditor";
 
 export function MenuEditor({ items }: { items: MenuItem[] }) {
   const [editing, setEditing] = useState<string | null>(null);
@@ -58,6 +59,7 @@ function Row({ item: it, first, last, onEdit }: { item: MenuItem; first: boolean
           <span className="font-semibold text-enamel-deep">{baht(it.price)}</span>
           {it.daily_limit != null && <> · วันละ {it.daily_limit} ที่</>}
           {it.description && <> · {it.description}</>}
+          {it.options.length > 0 && <> · ตัวเลือก: {it.options.map((g) => g.name).join(", ")}</>}
         </p>
       </div>
       <label className="flex shrink-0 items-center gap-2 text-sm text-ink-2">
@@ -98,17 +100,28 @@ function ItemForm({
   const [state, formAction, pending] = useActionState(action, undefined);
   const ref = useRef<HTMLFormElement>(null);
   const handled = useRef<number | undefined>(undefined);
+  const [optionsKey, setOptionsKey] = useState(0);
+  const [, startSave] = useTransition();
   useEffect(() => {
     if (!state?.ok || handled.current === state.ok) return;
     handled.current = state.ok;
     if (keepOpen) {
       ref.current?.reset();
+      setOptionsKey((k) => k + 1);
       ref.current?.querySelector<HTMLInputElement>("input[name=name]")?.focus();
     } else onDone();
   }, [state, keepOpen, onDone]);
 
   return (
-    <form ref={ref} action={formAction} className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem]">
+    <form
+      ref={ref}
+      // ส่งเองแทน action={...} เพื่อไม่ให้ React ล้างค่าที่กรอกไว้เมื่อบันทึกไม่ผ่าน
+      onSubmit={(e) => {
+        e.preventDefault();
+        const data = new FormData(e.currentTarget);
+        startSave(() => formAction(data));
+      }}
+      className="grid gap-3 sm:grid-cols-[1fr_7rem_7rem]">
       {item && <input type="hidden" name="id" value={item.id} />}
       <label className="block sm:col-span-1">
         <span className="mb-1 block text-sm font-medium">ชื่อเมนู</span>
@@ -126,6 +139,7 @@ function ItemForm({
         <span className="mb-1 block text-sm font-medium">รายละเอียด <span className="font-normal text-ink-3">ไม่บังคับ</span></span>
         <input name="description" maxLength={160} defaultValue={item?.description} placeholder="เช่น เผ็ดกลาง, กล่องละ 6 ชิ้น" className="input" />
       </label>
+      <OptionsEditor key={optionsKey} initial={item?.options ?? []} />
       {state?.error && <p role="alert" className="text-sm font-medium text-chili sm:col-span-3">{state.error}</p>}
       <div className="flex gap-2 sm:col-span-3">
         <button disabled={pending} className="btn-primary">{pending ? "กำลังบันทึก…" : item ? "บันทึก" : "เพิ่มเมนู"}</button>
